@@ -55,17 +55,30 @@ def _parse_page_html(domain: str, final_url: str, status: int, html: str) -> Par
         tag.decompose()
     text_len = len(soup.get_text(" ", strip=True))
 
-    # JSON-LD @type 列表
+    # 段落：有实质文本的 <p>
+    p_count = sum(1 for p in soup.find_all("p") if (p.get_text(" ", strip=True) or "").strip())
+
+    # JSON-LD：@type 列表、日期，以及完整原始对象（供 understand/trust 自行解析 @graph 等）
     schemas = []
+    jsonld_dates = []
+    jsonld_blocks = []
+    jsonld_errors = 0
     for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = script.string or ""
         try:
-            data = json.loads(script.string or "")
-            items = data if isinstance(data, list) else [data]
-            for it in items:
-                if isinstance(it, dict) and it.get("@type"):
-                    schemas.append(it["@type"])
+            data = json.loads(raw)
         except Exception:
-            pass
+            jsonld_errors += 1
+            continue
+        jsonld_blocks.append(data)
+        items = data if isinstance(data, list) else [data]
+        for it in items:
+            if isinstance(it, dict):
+                if it.get("@type"):
+                    schemas.append(it["@type"])
+                for key in ("datePublished", "dateModified", "dateCreated"):
+                    if it.get(key):
+                        jsonld_dates.append(str(it[key]))
 
     return ParsedPage(
         url=final_url,
@@ -87,6 +100,14 @@ def _parse_page_html(domain: str, final_url: str, status: int, html: str) -> Par
         strong_count=len(soup.find_all(["strong", "em"])),
         time_elems=len(soup.find_all("time")),
         author_elems=_count_author_signals(soup),
+        p_count=p_count,
+        dl_count=len(soup.find_all("dl")),
+        question_headings=_count_question_headings(soup),
+        visible_date=_has_visible_date(soup),
+        jsonld_dates=jsonld_dates,
+        raw_html=html,
+        jsonld_blocks=jsonld_blocks,
+        jsonld_errors=jsonld_errors,
     )
 
 
@@ -114,6 +135,30 @@ def _count_author_signals(soup) -> int:
         except Exception:
             pass
     return n
+
+
+_QUESTION_HEADING_RE = re.compile(r"^(如何|怎么|怎样|为何|为什么|什么|哪些|哪个|哪里|是否|能不能|可以|多少|多久|几个|谁)|[？?]$")
+_DATE_RES = [
+    re.compile(r"\d{4}[-/.]\d{1,2}[-/.]\d{1,2}"),       # 2024-01-01 / 2024/1/1
+    re.compile(r"\d{4}年\d{1,2}月\d{1,2}日?"),          # 2024年1月1日
+    re.compile(r"\d{1,2}月\d{1,2}日"),                   # 1月1日
+]
+
+
+def _count_question_headings(soup) -> int:
+    """统计疑问式标题（h1-h6）：以疑问词开头或以问号结尾。"""
+    n = 0
+    for tag in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
+        text = (tag.get_text(" ", strip=True) or "").strip()
+        if text and _QUESTION_HEADING_RE.search(text):
+            n += 1
+    return n
+
+
+def _has_visible_date(soup) -> bool:
+    """判断去脚本后的可见文本中是否出现日期。"""
+    text = soup.get_text(" ", strip=True)
+    return any(r.search(text) for r in _DATE_RES)
 
 
 def parse_robots(domain: str, response) -> RobotsInfo | None:
