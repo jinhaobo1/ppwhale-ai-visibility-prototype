@@ -65,8 +65,11 @@ async def _get(client: httpx.AsyncClient, url: str):
         return None
 
 
-def _discover_page_urls(domain: str, home_html: str, sitemap_urls: list[str]) -> list[str]:
-    """从 sitemap 和首页链接里发现候选代表页 URL（去重、过滤、设上限）。"""
+def _discover_page_urls(domain: str, home_html: str, sitemap_urls: list[str]) -> tuple[list[str], list[str]]:
+    """从 sitemap 和首页链接里发现候选代表页 URL。
+
+    返回 (代表页URL列表[有上限], 全部候选URL列表[去重，供维度4发现特定页面])。
+    """
     base = f"https://{domain}"
     candidates: list[str] = []
 
@@ -75,30 +78,37 @@ def _discover_page_urls(domain: str, home_html: str, sitemap_urls: list[str]) ->
         if _is_scannable(domain, u):
             candidates.append(u)
 
-    # 来自首页链接
+    # 来自首页链接（含 ./blog.html、blog.html 等相对链接）
     try:
         soup = BeautifulSoup(home_html, "html.parser")
         for a in soup.find_all("a", href=True):
-            href = a["href"]
+            href = (a["href"] or "").strip()
+            if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
+                continue
             if href.startswith("/"):
+                href = urljoin(base, href)
+            elif not href.startswith(("http://", "https://")):
                 href = urljoin(base, href)
             if _is_scannable(domain, href):
                 candidates.append(href)
     except Exception:
         pass
 
-    # 去重、去掉首页本身、设上限
-    seen, result = set(), []
+    # 去重、去掉首页本身；代表页设上限，全部候选单独设安全上限
+    seen, result, all_urls = set(), [], []
     home = base + "/"
     for u in candidates:
         if u.rstrip("/") == home.rstrip("/"):
             continue
-        if u not in seen:
-            seen.add(u)
+        if u in seen:
+            continue
+        seen.add(u)
+        all_urls.append(u)
+        if len(result) < MAX_REPRESENTATIVE_PAGES:
             result.append(u)
-        if len(result) >= MAX_REPRESENTATIVE_PAGES:
+        if len(all_urls) >= 500:
             break
-    return result
+    return result, all_urls
 
 
 def _is_scannable(domain: str, url: str) -> bool:
@@ -135,7 +145,8 @@ async def crawl(domain: str) -> ScanContext:
     llms = parse_llms(llms_resp)
 
     # 发现并抓取代表页
-    page_urls = _discover_page_urls(domain, home_resp.text if home_resp else "", sitemap.urls)
+    page_urls, discovered = _discover_page_urls(
+        domain, home_resp.text if home_resp else "", sitemap.urls)
     pages: list[ParsedPage] = [home] if home else []
 
     async def fetch_one(url: str) -> ParsedPage:
@@ -160,4 +171,5 @@ async def crawl(domain: str) -> ScanContext:
     return ScanContext(
         domain=domain, home=home, robots=robots,
         sitemap=sitemap, llms=llms, pages=pages,
+        discovered_urls=discovered,
     )

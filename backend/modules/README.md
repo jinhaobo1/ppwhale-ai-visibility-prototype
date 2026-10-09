@@ -36,17 +36,22 @@ def run(context):
 ## context 里有什么（你能读的数据）
 
 ```python
-context.domain      # 目标域名
-context.home        # 首页 ParsedPage（或 None）
-context.robots      # RobotsInfo：robots.txt 解析结果
-context.sitemap     # SitemapInfo：.found / .urls
-context.llms        # LlmsInfo：.found / .status
-context.pages       # list[ParsedPage]：所有代表页（含首页）
+context.domain           # 目标域名
+context.home             # 首页 ParsedPage（或 None）
+context.robots           # RobotsInfo：robots.txt 解析结果
+context.sitemap          # SitemapInfo：.found / .urls
+context.llms             # LlmsInfo：.found / .status
+context.pages            # list[ParsedPage]：所有代表页（含首页）
+context.discovered_urls  # list[str]：发现的全部候选 URL（含未抓取的，去重）
 ```
 
 `ParsedPage` 字段：`url, status, final_url, title, meta_desc, h1_count, h2_count,
 text_len, schemas, canonical, og_url, noindex, nosnippet, list_count, table_count,
 internal_links, strong_count, time_elems, author_elems`。
+
+维度 3/4 扩充字段（只加不改）：`jsonld`（完整 JSON-LD 块，数组/@graph 已摊平为
+dict 列表）、`jsonld_errors`（解析失败块数）、`og_site_name`、`emails`、`phones`
+（可见文本中的邮箱/电话）、`external_links`（站外链接）。
 
 ## make_check 字段契约
 

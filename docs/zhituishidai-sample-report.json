@@ -1,0 +1,196 @@
+{
+  "domain": "zhituishidai.com",
+  "dimensions": [
+    {
+      "name": "能被找到",
+      "score": 0,
+      "max": 10,
+      "label": "抓取、索引、站点地图与 URL"
+    },
+    {
+      "name": "能被看见",
+      "score": 0,
+      "max": 30,
+      "label": "正文读取、标题与内容结构"
+    },
+    {
+      "name": "能被理解",
+      "score": 20,
+      "max": 25,
+      "label": "品牌、网站与页面结构化标记"
+    },
+    {
+      "name": "能被信任",
+      "score": 8,
+      "max": 15,
+      "label": "公司、联系、合规与署名信息"
+    },
+    {
+      "name": "能被引用",
+      "score": 0,
+      "max": 20,
+      "label": "榜单、对比、指南与案例数据"
+    }
+  ],
+  "checks": [
+    {
+      "id": 17,
+      "dim": 2,
+      "status": "good",
+      "title": "品牌实体标记",
+      "priority": "",
+      "score": 5,
+      "max": 5,
+      "impact": "检测到品牌实体标记，已含 4/4 项关键字段",
+      "fix": "保持现状。",
+      "scope": "",
+      "evidence": [
+        "品牌实体：name=上海智推时代科技有限公司，url=https://zhituishidai.com/，logo=有，联系方式=有"
+      ]
+    },
+    {
+      "id": 18,
+      "dim": 2,
+      "status": "good",
+      "title": "网站主体标记",
+      "priority": "",
+      "score": 4,
+      "max": 4,
+      "impact": "WebSite 标记齐全：名称 + URL + 站内搜索入口",
+      "fix": "保持现状。",
+      "scope": "",
+      "evidence": [
+        "WebSite：name=智推时代 GenOptima，url=https://zhituishidai.com/，搜索入口=有"
+      ]
+    },
+    {
+      "id": 19,
+      "dim": 2,
+      "status": "warn",
+      "title": "面包屑标记",
+      "priority": "",
+      "score": 2,
+      "max": 4,
+      "impact": "5 条面包屑中仅 1 条有效。",
+      "fix": "为更多层级页补齐 BreadcrumbList。",
+      "scope": "",
+      "evidence": [
+        "https://zhituishidai.com/：面包屑 无效（1 项）",
+        "https://zhituishidai.com/index.html：面包屑 无效（1 项）",
+        "https://zhituishidai.com/blog.html：面包屑 有效（2 项）",
+        "https://zhituishidai.com/blog/geo-benchmark-2026.html：面包屑 无效（3 项）",
+        "https://zhituishidai.com/services-lite.html：面包屑 无效（3 项）"
+      ]
+    },
+    {
+      "id": 20,
+      "dim": 2,
+      "status": "warn",
+      "title": "代表页面专项标记",
+      "priority": "",
+      "score": 5,
+      "max": 8,
+      "impact": "4/5 个类型页面有对应专项标记，其余缺失。",
+      "fix": "为缺标记的文章/产品/FAQ 页补充对应 BlogPosting/Product/FAQPage。",
+      "scope": "",
+      "evidence": [
+        "https://zhituishidai.com/：类型=faq，专项标记=有",
+        "https://zhituishidai.com/index.html：类型=faq，专项标记=有",
+        "https://zhituishidai.com/blog.html：类型=article，专项标记=缺",
+        "https://zhituishidai.com/blog/geo-benchmark-2026.html：类型=article+faq，专项标记=有",
+        "https://zhituishidai.com/services-lite.html：类型=faq+product，专项标记=有"
+      ]
+    },
+    {
+      "id": 21,
+      "dim": 2,
+      "status": "good",
+      "title": "结构化数据有效性",
+      "priority": "",
+      "score": 4,
+      "max": 4,
+      "impact": "45 段 JSON-LD 全部解析成功（含数组/@graph）。",
+      "fix": "保持现状，新增标记时用 Google 富媒体测试工具校验。",
+      "scope": "",
+      "evidence": [
+        "解析成功 45 段，失败 0 段"
+      ]
+    },
+    {
+      "id": 22,
+      "dim": 3,
+      "status": "warn",
+      "title": "品牌信息完整性",
+      "priority": "",
+      "score": 3,
+      "max": 4,
+      "impact": "品牌实体与页面身份 3/4 项齐全一致（不一致/缺失：名称一致）",
+      "fix": "修复不一致/缺失项：名称一致——schema name 与 og:site_name/标题保持一致、url 指向官网、补 logo，并在页面声明 og:site_name。",
+      "scope": "",
+      "evidence": [
+        "schema name=上海智推时代科技有限公司，页面身份=智推时代 genoptima，schema url=https://zhituishidai.com/，logo=有，og:site_name=有"
+      ]
+    },
+    {
+      "id": 23,
+      "dim": 3,
+      "status": "warn",
+      "title": "公司与联系页面",
+      "priority": "",
+      "score": 2,
+      "max": 3,
+      "impact": "未发现独立的公司/联系页面，但首页可见邮箱/电话。",
+      "fix": "建议增设独立的「关于我们」与「联系我们」页面，方便 AI 抓取引用。",
+      "scope": "",
+      "evidence": [
+        "首页含邮箱 3 个、电话 4 个"
+      ]
+    },
+    {
+      "id": 24,
+      "dim": 3,
+      "status": "bad",
+      "title": "隐私与服务条款",
+      "priority": "",
+      "score": 0,
+      "max": 2,
+      "impact": "未发现隐私政策或服务条款页面，AI 判定品牌合规透明度不足。",
+      "fix": "发布隐私政策与服务条款页面，并在页脚链接。",
+      "scope": "",
+      "evidence": [
+        "zhituishidai.com：未发现隐私/条款页面"
+      ]
+    },
+    {
+      "id": 25,
+      "dim": 3,
+      "status": "warn",
+      "title": "文章署名与日期",
+      "priority": "",
+      "score": 2,
+      "max": 3,
+      "impact": "1/2 篇文章有署名+日期，其余缺失。",
+      "fix": "为缺署名/日期的文章补充作者与发布时间（含 JSON-LD datePublished）。",
+      "scope": "",
+      "evidence": [
+        "https://zhituishidai.com/blog.html：作者=缺，日期=有",
+        "https://zhituishidai.com/blog/geo-benchmark-2026.html：作者=有，日期=有"
+      ]
+    },
+    {
+      "id": 26,
+      "dim": 3,
+      "status": "warn",
+      "title": "官方账号关联",
+      "priority": "",
+      "score": 1,
+      "max": 3,
+      "impact": "页面可见 10 个官方账号链接，但 JSON-LD 未声明 sameAs。",
+      "fix": "在 Organization 标记中添加 sameAs 数组，列出官方账号 URL。",
+      "scope": "",
+      "evidence": [
+        "页面链接：https://mp.weixin.qq.com/s/A5QTmu4yhS2-k6J46rur_w 等 10 个"
+      ]
+    }
+  ]
+}

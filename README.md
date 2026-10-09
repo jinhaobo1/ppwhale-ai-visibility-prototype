@@ -49,13 +49,19 @@ curl -X POST http://127.0.0.1:8000/api/check \
 
 ```bash
 cd backend
-.venv\Scripts\python tests\test_find_module.py
+.venv\Scripts\python tests\test_framework.py          # 框架层
+.venv\Scripts\python tests\test_understand_module.py  # 维度3 能被理解
+.venv\Scripts\python tests\test_trust_module.py       # 维度4 能被信任
+.venv\Scripts\python tests\test_parsers_ext.py        # 解析器扩充字段
 ```
 
 ## 当前状态
 
 - ✅ 框架 + 契约 + 模块注册表：已就绪，5 人可并行开发
-- ⏳ `find` / `see` / `understand` / `trust` / `cite`：5 个模块均为空壳，待各自实现
+- ✅ `understand` / `trust`：已实现（维度 3 能被理解 25 分 + 维度 4 能被信任 15 分，
+  含离线测试 `tests/test_understand_module.py`、`tests/test_trust_module.py`、
+  `tests/test_parsers_ext.py`）
+- ⏳ `find` / `see` / `cite`：3 个模块仍为空壳，待各自实现
 - ⏳ 前端接入：把原型 HTML 的假动画替换成调 `/api/check`
 
 ## 技术栈

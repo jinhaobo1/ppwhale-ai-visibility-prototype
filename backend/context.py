@@ -29,6 +29,13 @@ class ParsedPage:
     strong_count: int = 0              # strong/em 重点标记数
     time_elems: int = 0                # time 标签 / 日期信息数量
     author_elems: int = 0              # 作者署名信号数量
+    # ↓ 以下为维度 3/4（understand/trust）扩充的只读数据（只加不改）
+    jsonld: list = field(default_factory=list)    # 完整 JSON-LD 块（数组/@graph 已摊平为 dict 列表）
+    jsonld_errors: int = 0             # JSON-LD 解析失败的块数
+    og_site_name: str | None = None    # og:site_name
+    emails: list = field(default_factory=list)    # 可见文本中的邮箱（去重）
+    phones: list = field(default_factory=list)    # 可见文本中的电话（去重）
+    external_links: list = field(default_factory=list)  # 页面里的站外链接（去重）
 
 
 @dataclass
@@ -62,6 +69,8 @@ class ScanContext:
     - home：首页解析结果
     - robots / sitemap / llms：关键文件解析结果
     - pages：所有代表页（含首页），供需要多页样本的检查项使用
+    - discovered_urls：从 sitemap/首页链接发现的全部候选 URL（去重，含未被抓取的部分）
+      → 维度 4 用来发现公司/联系/隐私等特定页面
     """
     domain: str
     home: ParsedPage | None = None
@@ -69,3 +78,4 @@ class ScanContext:
     sitemap: SitemapInfo = field(default_factory=SitemapInfo)
     llms: LlmsInfo = field(default_factory=LlmsInfo)
     pages: list = field(default_factory=list)   # list[ParsedPage]
+    discovered_urls: list = field(default_factory=list)   # list[str]（只加不改）

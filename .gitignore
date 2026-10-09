@@ -5,6 +5,9 @@ __pycache__/
 .venv/
 venv/
 env/
+.deps/
+.wheels/
+get-pip.py
 
 # 环境变量 / 密钥
 .env
