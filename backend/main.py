@@ -2,7 +2,7 @@
 
 本地启动：
     cd backend
-    pip install -r requirements.txt
+    .venv\\Scripts\\activate
     uvicorn main:app --reload --port 8000
 
 测试：
@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from analyzer import analyze_website
+from engine import analyze
 
 app = FastAPI(title="PPWhale 官网 AI 信源诊断")
 
@@ -40,6 +40,6 @@ async def health():
 async def check(req: CheckRequest):
     """核心检测接口：输入域名/URL，返回五维评分 + 检查项报告。"""
     try:
-        return await analyze_website(req.url)
+        return await analyze(req.url)
     except ValueError as e:
         return {"error": str(e)}
