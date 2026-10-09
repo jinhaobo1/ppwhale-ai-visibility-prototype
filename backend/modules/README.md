@@ -47,7 +47,15 @@ context.discovered_urls  # list[str]：发现的全部候选 URL（含未抓取�
 
 `ParsedPage` 字段：`url, status, final_url, title, meta_desc, h1_count, h2_count,
 text_len, schemas, canonical, og_url, noindex, nosnippet, list_count, table_count,
-internal_links, strong_count, time_elems, author_elems`。
+internal_links, strong_count, time_elems, author_elems, p_count, dl_count,
+question_headings, visible_date, jsonld_dates, raw_html, jsonld_blocks, jsonld_errors`。
+
+**自解析兜底（重要）**：上面统计字段不够用时，直接用原料自行解析，**不要改框架层**：
+
+- `p.raw_html`：原始 HTML 字符串，用 BeautifulSoup 自行提取正文/标题/联系方式/步骤等；
+- `p.jsonld_blocks`：每个 `<script type="application/ld+json">` 解析后的**完整原始对象**
+  （含 `@graph`、数组），供结构化数据类检查项自取字段（name/logo/sameAs/author 等）；
+- `p.jsonld_errors`：解析失败的 JSON-LD 块数（用于「结构化数据有效性」检查）。
 
 维度 3/4 扩充字段（只加不改）：`jsonld`（完整 JSON-LD 块，数组/@graph 已摊平为
 dict 列表）、`jsonld_errors`（解析失败块数）、`og_site_name`、`emails`、`phones`

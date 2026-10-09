@@ -15,8 +15,8 @@ backend/
   context.py       # 契约：ScanContext / ParsedPage 等数据结构
   checks.py        # 契约：五维定义 + 30 项 ID 分配 + make_check
   modules/         # ★ 5 个维度模块，每人负责一个（只改自己的文件夹）
-    find/          #   能被找到（10 分，ID 1-8）⏳ 待实现
-    see/           #   能被看见（30 分，ID 9-16）⏳ 待实现
+    find/          #   能被找到（10 分，ID 1-8）✅ 已实现
+    see/           #   能被看见（30 分，ID 9-16）✅ 已实现
     understand/    #   能被理解（25 分，ID 17-21）⏳ 待实现
     trust/         #   能被信任（15 分，ID 22-26）⏳ 待实现
     cite/          #   能被引用（20 分，ID 27-30）⏳ 待实现
@@ -58,10 +58,15 @@ cd backend
 ## 当前状态
 
 - ✅ 框架 + 契约 + 模块注册表：已就绪，5 人可并行开发
+<<<<<<< HEAD
 - ✅ `understand` / `trust`：已实现（维度 3 能被理解 25 分 + 维度 4 能被信任 15 分，
   含离线测试 `tests/test_understand_module.py`、`tests/test_trust_module.py`、
   `tests/test_parsers_ext.py`）
 - ⏳ `find` / `see` / `cite`：3 个模块仍为空壳，待各自实现
+=======
+- ✅ `find`（能被找到，10 分）、`see`（能被看见，30 分）：已实现
+- ⏳ `understand` / `trust` / `cite`：3 个模块为空壳，待各自实现
+>>>>>>> 548715499e83d48ce77e5c9b61365e658e233b34
 - ⏳ 前端接入：把原型 HTML 的假动画替换成调 `/api/check`
 
 ## 技术栈
