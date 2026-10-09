@@ -57,13 +57,16 @@ def _parse_page_html(domain: str, final_url: str, status: int, html: str) -> Par
 
     # JSON-LD 完整解析：数组/@graph 摊平成 dict 列表；逐段记录解析失败
     # ★ 必须在 decompose script 之前提取，否则 JSON-LD 会被删掉
-    jsonld, jsonld_errors = _extract_jsonld(soup)
+    jsonld, jsonld_blocks, jsonld_errors = _extract_jsonld(soup)
 
-    # @type 列表（保留给维度 1/2 使用；从摊平后的 jsonld 派生，与旧口径一致）
+    # @type 列表（保留给维度 1/2 使用；从摊平后的 jsonld 派生）
     schemas = []
     for it in jsonld:
         if isinstance(it, dict) and it.get("@type"):
             schemas.append(it["@type"])
+
+    # JSON-LD 日期（datePublished/dateModified/dateCreated，含 @graph 内）
+    jsonld_dates = _collect_jsonld_dates(jsonld)
 
     author_elems = _count_author_signals(soup, jsonld)
 
@@ -73,37 +76,13 @@ def _parse_page_html(domain: str, final_url: str, status: int, html: str) -> Par
     text_len = len(soup.get_text(" ", strip=True))
     visible_text = soup.get_text(" ", strip=True)
 
-<<<<<<< HEAD
+    # 段落：有实质文本的 <p>（维度 2 使用）
+    p_count = sum(1 for p in soup.find_all("p") if (p.get_text(" ", strip=True) or "").strip())
+
     # 联系方式与站外链接（维度 4 使用）
     emails = _extract_emails(visible_text)
     phones = _extract_phones(visible_text)
     external_links = _extract_external_links(domain, soup)
-=======
-    # 段落：有实质文本的 <p>
-    p_count = sum(1 for p in soup.find_all("p") if (p.get_text(" ", strip=True) or "").strip())
-
-    # JSON-LD：@type 列表、日期，以及完整原始对象（供 understand/trust 自行解析 @graph 等）
-    schemas = []
-    jsonld_dates = []
-    jsonld_blocks = []
-    jsonld_errors = 0
-    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
-        raw = script.string or ""
-        try:
-            data = json.loads(raw)
-        except Exception:
-            jsonld_errors += 1
-            continue
-        jsonld_blocks.append(data)
-        items = data if isinstance(data, list) else [data]
-        for it in items:
-            if isinstance(it, dict):
-                if it.get("@type"):
-                    schemas.append(it["@type"])
-                for key in ("datePublished", "dateModified", "dateCreated"):
-                    if it.get(key):
-                        jsonld_dates.append(str(it[key]))
->>>>>>> 548715499e83d48ce77e5c9b61365e658e233b34
 
     return ParsedPage(
         url=final_url,
@@ -124,16 +103,7 @@ def _parse_page_html(domain: str, final_url: str, status: int, html: str) -> Par
         internal_links=_count_internal_links(domain, soup),
         strong_count=len(soup.find_all(["strong", "em"])),
         time_elems=len(soup.find_all("time")),
-<<<<<<< HEAD
         author_elems=author_elems,
-        jsonld=jsonld,
-        jsonld_errors=jsonld_errors,
-        og_site_name=og_site_name,
-        emails=emails,
-        phones=phones,
-        external_links=external_links,
-=======
-        author_elems=_count_author_signals(soup),
         p_count=p_count,
         dl_count=len(soup.find_all("dl")),
         question_headings=_count_question_headings(soup),
@@ -141,8 +111,12 @@ def _parse_page_html(domain: str, final_url: str, status: int, html: str) -> Par
         jsonld_dates=jsonld_dates,
         raw_html=html,
         jsonld_blocks=jsonld_blocks,
+        jsonld=jsonld,
         jsonld_errors=jsonld_errors,
->>>>>>> 548715499e83d48ce77e5c9b61365e658e233b34
+        og_site_name=og_site_name,
+        emails=emails,
+        phones=phones,
+        external_links=external_links,
     )
 
 
@@ -253,9 +227,13 @@ def _flatten_jsonld(data, out: list):
             out.append(data)
 
 
-def _extract_jsonld(soup) -> tuple[list, int]:
-    """解析页面全部 JSON-LD 块。返回 (摊平后的 dict 列表, 解析失败块数)。"""
+def _extract_jsonld(soup) -> tuple[list, list, int]:
+    """解析页面全部 JSON-LD 块。
+
+    返回 (摊平后的 dict 列表[含 @graph], 每个脚本的完整原始对象列表, 解析失败块数)。
+    """
     out: list = []
+    blocks: list = []
     errors = 0
     for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
         try:
@@ -263,8 +241,20 @@ def _extract_jsonld(soup) -> tuple[list, int]:
         except Exception:
             errors += 1
             continue
+        blocks.append(data)
         _flatten_jsonld(data, out)
-    return out, errors
+    return out, blocks, errors
+
+
+def _collect_jsonld_dates(jsonld: list) -> list[str]:
+    """从摊平后的 JSON-LD 收集日期字段（datePublished/dateModified/dateCreated）。"""
+    dates = []
+    for it in jsonld:
+        if isinstance(it, dict):
+            for key in ("datePublished", "dateModified", "dateCreated"):
+                if it.get(key):
+                    dates.append(str(it[key]))
+    return dates
 
 
 def _extract_emails(text: str) -> list[str]:
