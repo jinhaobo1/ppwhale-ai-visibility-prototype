@@ -4,7 +4,7 @@ TODO：实现本维度的检查项（ID 17-21）：
   17 品牌实体标记      18 网站主体标记      19 面包屑标记
   20 代表页面专项标记  21 结构化数据有效性
 
-写法参考 modules/find/__init__.py：
+实现参考 docs/spec.md 和 modules/README.md：
   - 入口 run(context) -> list[dict]，只读 context，不自己抓取；
   - 主要从 context.pages 里每个页面的 schemas（JSON-LD @type 列表）读取；
   - ID 必须落在 17-21（见 checks.CHECK_ID_RANGES["understand"]）。

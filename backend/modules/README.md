@@ -77,4 +77,6 @@ import json; print(json.dumps(asyncio.run(analyze('example.com')), ensure_ascii=
 
 ## 参考
 
-完整示例请看 **`find/__init__.py`**——它是唯一一个已经写完的模块，照着它的结构写就行。
+- 30 项规格与判定要点：`docs/spec.md`
+- 字段契约与 `make_check`：`checks.py`
+- 数据结构（ScanContext/ParsedPage）：`context.py`

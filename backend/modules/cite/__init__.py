@@ -4,7 +4,7 @@ TODO：实现本维度的检查项（ID 27-30）：
   27 榜单与优选内容    28 对比与替代方案内容
   29 指南与教程内容    30 案例与数据内容
 
-写法参考 modules/find/__init__.py：
+实现参考 docs/spec.md 和 modules/README.md：
   - 入口 run(context) -> list[dict]，只读 context，不自己抓取；
   - 需要发现候选页（榜单/对比/指南/案例）并验证内容证据（列表、表格、步骤、量化结果等）；
   - ID 必须落在 27-30（见 checks.CHECK_ID_RANGES["cite"]）。

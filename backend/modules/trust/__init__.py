@@ -4,7 +4,7 @@ TODO：实现本维度的检查项（ID 22-26）：
   22 品牌信息完整性    23 公司与联系页面    24 隐私与服务条款
   25 文章署名与日期    26 官方账号关联
 
-写法参考 modules/find/__init__.py：
+实现参考 docs/spec.md 和 modules/README.md：
   - 入口 run(context) -> list[dict]，只读 context，不自己抓取；
   - 部分检查项需要发现并抓取公司/联系/隐私等特定页面（可在本模块内做，但建议
     复用 context 已有的数据，必要时向框架申请扩展 crawler）；
