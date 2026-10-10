@@ -17,6 +17,7 @@ import re
 from urllib.parse import urlparse
 
 from checks import make_check
+from modules.understand import ai as _ai   # 复用维度3模块内的 AI 增强客户端（同属我负责的部分）
 
 DIM = 3  # 维度下标（能被信任）
 
@@ -92,6 +93,16 @@ def _url_host(url) -> str:
         return ""
 
 
+def _host_matches(domain: str, url) -> bool:
+    """URL 主机是否属于目标域名（精确匹配域名或其子域，排除 'xxexample.com' 误判）。"""
+    host = _url_host(url)
+    if not host:
+        return False
+    domain = (domain or "").lower().lstrip("www.")
+    host = host.lower().lstrip("www.")
+    return host == domain or host.endswith("." + domain)
+
+
 def _keyword_hit(url, title, kws) -> bool:
     hay = _norm(url) + " " + _norm(title)
     return any(k in hay for k in kws)
@@ -102,9 +113,9 @@ def _fetchable(pages, kws) -> list:
     return [p for p in pages if _keyword_hit(p.url or "", "", kws)]
 
 
-def _discovered_hit(context, kws):
+def _discovered_hit(context, pages, kws):
     """已发现（未抓取）的候选 URL 中命中关键词的数量。"""
-    fetched = {p.url for p in context.pages}
+    fetched = {p.url for p in pages}
     n = 0
     for u in context.discovered_urls:
         if u in fetched:
@@ -123,18 +134,14 @@ def _readable(p) -> bool:
 # ID 22 品牌信息完整性（4 分）
 # ---------------------------------------------------------------------------
 
-def _check22(context):
-    nodes = _brand_nodes(context.pages)
+def _check22(context, pages):
+    nodes = _brand_nodes(pages)
     if not nodes:
         return make_check(22, DIM, "bad", "品牌信息完整性", 0, 4,
             "无 Organization/Brand 结构化标记，品牌身份无法被 AI 对齐到页面信息。",
             "添加 Organization/Brand JSON-LD，并保证与页面 og:site_name、标题一致。",
             evidence=[f"{context.domain}：未发现品牌实体标记"])
 
-    node = nodes[0]
-    schema_name = _norm(_get(node, "name"))
-    schema_url = _get(node, "url", "@id") or ""
-    logo = _get(node, "logo")
     home = context.home
     page_name = ""
     if home and home.og_site_name:
@@ -144,22 +151,37 @@ def _check22(context):
     else:
         page_name = _norm(context.domain)
 
-    name_ok = bool(schema_name and page_name
-                   and (schema_name == page_name
-                        or schema_name in page_name
-                        or page_name in schema_name))
-    url_ok = bool(schema_url and context.domain in _url_host(schema_url))
-    logo_ok = bool(logo)
-    site_name_ok = bool(home and home.og_site_name)
+    def _fields_of(node):
+        schema_name = _norm(_get(node, "name"))
+        schema_url = _get(node, "url", "@id") or ""
+        logo = bool(_get(node, "logo"))
+        # 名称一致：完全相等，或双方都 ≥2 字符时互为子串（避免 "a" in "abc" 这类误判）
+        name_ok = bool(schema_name and page_name
+                       and (schema_name == page_name
+                            or (len(schema_name) >= 2 and len(page_name) >= 2
+                                and (schema_name in page_name or page_name in schema_name))))
+        url_ok = bool(schema_url and _host_matches(context.domain, schema_url))
+        site_name_ok = bool(home and home.og_site_name)
+        return {
+            "名称一致": name_ok,
+            "URL一致": url_ok,
+            "logo": logo,
+            "页面og:site_name": site_name_ok,
+        }
 
-    fields = {
-        "名称一致": name_ok,
-        "URL一致": url_ok,
-        "logo": logo_ok,
-        "页面og:site_name": site_name_ok,
-    }
-    got = [k for k, v in fields.items() if v]
-    missing = [k for k, v in fields.items() if not v]
+    # 取全站最完整的品牌实体判定，避免页面顺序影响分数
+    best_fields, best_node = {}, None
+    for node in nodes:
+        fields = _fields_of(node)
+        if sum(fields.values()) > sum(best_fields.values()):
+            best_fields, best_node = fields, node
+    schema_name = _norm(_get(best_node, "name"))
+    schema_url = _get(best_node, "url", "@id") or ""
+    logo_ok = bool(best_fields.get("logo"))
+    site_name_ok = bool(best_fields.get("页面og:site_name"))
+
+    got = [k for k, v in best_fields.items() if v]
+    missing = [k for k, v in best_fields.items() if not v]
     score = max(1, len(got))
     status = "good" if score == 4 else ("warn" if score >= 2 else "bad")
     impact = f"品牌实体与页面身份 {len(got)}/4 项齐全一致"
@@ -172,25 +194,26 @@ def _check22(context):
     return make_check(22, DIM, status, "品牌信息完整性", score, 4, impact, fix,
         evidence=[f"schema name={schema_name or '(空)'}，页面身份={page_name or '(空)'}，"
                   f"schema url={schema_url or '(空)'}，logo={'有' if logo_ok else '无'}，"
-                  f"og:site_name={'有' if site_name_ok else '无'}"])
+                  f"og:site_name={'有' if site_name_ok else '无'}",
+                  f"共检测到 {len(nodes)} 个品牌实体节点，按最完整者计分"])
 
 
 # ---------------------------------------------------------------------------
 # ID 23 公司与联系页面（3 分）
 # ---------------------------------------------------------------------------
 
-def _check23(context):
+def _check23(context, pages):
     home = context.home
-    c_pages = _fetchable(context.pages, COMPANY_KW)
-    t_pages = _fetchable(context.pages, CONTACT_KW)
+    c_pages = _fetchable(pages, COMPANY_KW)
+    t_pages = _fetchable(pages, CONTACT_KW)
     targets = c_pages + t_pages
 
     confirmed = [p for p in targets if _readable(p)
                  and (p.emails or p.phones)]
     readable_only = [p for p in targets if _readable(p)
                      and not (p.emails or p.phones)]
-    link_only = (_discovered_hit(context, COMPANY_KW)
-                 + _discovered_hit(context, CONTACT_KW))
+    link_only = (_discovered_hit(context, pages, COMPANY_KW)
+                 + _discovered_hit(context, pages, CONTACT_KW))
 
     if confirmed:
         best = confirmed[0]
@@ -225,11 +248,11 @@ def _check23(context):
 # ID 24 隐私与服务条款（2 分）
 # ---------------------------------------------------------------------------
 
-def _check24(context):
-    p_confirmed = [p for p in _fetchable(context.pages, PRIVACY_KW) if _readable(p)]
-    t_confirmed = [p for p in _fetchable(context.pages, TERMS_KW) if _readable(p)]
-    p_discovered = _discovered_hit(context, PRIVACY_KW)
-    t_discovered = _discovered_hit(context, TERMS_KW)
+def _check24(context, pages):
+    p_confirmed = [p for p in _fetchable(pages, PRIVACY_KW) if _readable(p)]
+    t_confirmed = [p for p in _fetchable(pages, TERMS_KW) if _readable(p)]
+    p_discovered = _discovered_hit(context, pages, PRIVACY_KW)
+    t_discovered = _discovered_hit(context, pages, TERMS_KW)
 
     if p_confirmed and t_confirmed:
         return make_check(24, DIM, "good", "隐私与服务条款", 2, 2,
@@ -280,8 +303,8 @@ def _has_jsonld_date(p) -> bool:
                for n in p.jsonld if isinstance(n, dict))
 
 
-def _check25(context):
-    articles = [p for p in context.pages if _is_article(p)]
+def _check25(context, pages):
+    articles = [p for p in pages if _is_article(p)]
     if not articles:
         return make_check(25, DIM, "warn", "文章署名与日期", 0, 3,
             "未检测到文章页，无法验证署名与日期。",
@@ -320,13 +343,17 @@ def _check25(context):
 # ---------------------------------------------------------------------------
 
 def _is_social(url) -> bool:
+    """URL 主机是否为官方社媒平台（精确域名/子域匹配，排除 'x.com.evil.com' 误判）。"""
     host = _url_host(url)
-    return any(d in host for d in SOCIAL_DOMAINS)
+    if not host:
+        return False
+    host = host.lower().lstrip("www.")
+    return any(host == d or host.endswith("." + d) for d in SOCIAL_DOMAINS)
 
 
-def _check26(context):
+def _check26(context, pages):
     sameas_hits = []
-    for n in _brand_nodes(context.pages):
+    for n in _brand_nodes(pages):
         sa = n.get("sameAs")
         if isinstance(sa, str):
             sa = [sa]
@@ -337,7 +364,7 @@ def _check26(context):
 
     link_hits = []
     seen = set()
-    for p in context.pages:
+    for p in pages:
         for u in p.external_links:
             if _is_social(u) and u not in seen:
                 seen.add(u)
@@ -372,10 +399,19 @@ def _check26(context):
 def run(context):
     if context is None:
         return []
-    return [
-        _check22(context),
-        _check23(context),
-        _check24(context),
-        _check25(context),
-        _check26(context),
+    pages = [p for p in (context.pages or []) if p is not None]
+    checks = [
+        _check22(context, pages),
+        _check23(context, pages),
+        _check24(context, pages),
+        _check25(context, pages),
+        _check26(context, pages),
     ]
+    # 可选 AI 增强（DeepSeek）：为每项补充 ai_impact/ai_fix，并追加维度总评。
+    # 未配置 key / 失败时静默降级为纯规则模式，分数不受影响。
+    checks, summary = _ai.enhance(context.domain, "能被信任", checks)
+    if summary:
+        checks.append(make_check(903, DIM, "advice", "AI 维度总评", None, None,
+                                 summary, "",
+                                 evidence=[f"由 DeepSeek 生成（{context.domain}）"]))
+    return checks

@@ -20,7 +20,6 @@ backend/
     understand/    #   能被理解（25 分，ID 17-21）✅ 已实现
     trust/         #   能被信任（15 分，ID 22-26）✅ 已实现
     cite/          #   能被引用（20 分，ID 27-30）⏳ 待实现
-  tests/           # 单元测试（离线，不依赖外网）
 docs/
   spec.md          # 30 项真检测规格（实现说明书）
 ```
@@ -45,25 +44,11 @@ curl -X POST http://127.0.0.1:8000/api/check \
   -d '{"url":"ppwhale.com"}'
 ```
 
-跑单元测试：
-
-```bash
-cd backend
-.venv\Scripts\python tests\test_framework.py          # 框架层
-.venv\Scripts\python tests\test_find_module.py        # 维度1 能被找到
-.venv\Scripts\python tests\test_see_module.py         # 维度2 能被看见
-.venv\Scripts\python tests\test_understand_module.py  # 维度3 能被理解
-.venv\Scripts\python tests\test_trust_module.py       # 维度4 能被信任
-.venv\Scripts\python tests\test_parsers_ext.py        # 解析器扩充字段
-```
-
 ## 当前状态
 
 - ✅ 框架 + 契约 + 模块注册表：已就绪，5 人可并行开发
 - ✅ `find`（能被找到，10 分）、`see`（能被看见，30 分）：已实现
-- ✅ `understand`（能被理解，25 分）、`trust`（能被信任，15 分）：已实现，
-  含离线测试 `tests/test_understand_module.py`、`tests/test_trust_module.py`、
-  `tests/test_parsers_ext.py`
+- ✅ `understand`（能被理解，25 分）、`trust`（能被信任，15 分）：已实现
 - ⏳ `cite`（能被引用，20 分）：仍为空壳，待实现
 - ⏳ 前端接入：把原型 HTML 的假动画替换成调 `/api/check`
 

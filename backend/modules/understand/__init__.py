@@ -14,9 +14,11 @@
 """
 
 import json
+import re
 from urllib.parse import urlparse
 
 from checks import make_check
+from modules.understand import ai as _ai
 
 DIM = 2  # 维度下标（能被理解）
 
@@ -76,6 +78,16 @@ def _url_host(url) -> str:
         return ""
 
 
+def _host_matches(domain: str, url) -> bool:
+    """URL 主机是否属于目标域名（精确匹配域名或其子域，排除 'xxexample.com' 这类误判）。"""
+    host = _url_host(url)
+    if not host:
+        return False
+    domain = (domain or "").lower().lstrip("www.")
+    host = host.lower().lstrip("www.")
+    return host == domain or host.endswith("." + domain)
+
+
 # ---------------------------------------------------------------------------
 # ID 17 品牌实体标记（5 分）
 # ---------------------------------------------------------------------------
@@ -94,28 +106,43 @@ def _brand_contact(node) -> bool:
     return False
 
 
-def _check17(context):
-    nodes = [n for p in context.pages for n in _of_type(p.jsonld, BRAND_TYPES)]
-    if not nodes:
-        return make_check(17, DIM, "bad", "品牌实体标记", 0, 5,
-            "全站未检测到 Organization / Brand 结构化标记，AI 无法建立品牌实体档案。",
-            "在首页等核心页面添加 JSON-LD Organization/Brand，并填写名称、官网、logo 与联系方式。",
-            evidence=[f"{context.domain}：未发现品牌实体标记"])
-
-    node = nodes[0]
+def _brand_score(node, domain) -> tuple[int, dict]:
+    """计算单个品牌实体的字段齐全度，返回 (得分, 字段明细)。"""
     name = str(_get(node, "name") or "").strip()
     url = _get(node, "url", "@id") or ""
     logo = _get(node, "logo")
     contact = _brand_contact(node)
     fields = {
         "名称": bool(name),
-        "官网URL": bool(url and context.domain in _url_host(url)),
+        "官网URL": bool(url and _host_matches(domain, url)),
         "logo": bool(logo),
         "联系方式": contact,
     }
-    got = [k for k, v in fields.items() if v]
-    missing = [k for k, v in fields.items() if not v]
-    score = 1 + len(got)                     # 实体本身 1 分 + 每个字段 1 分
+    got = sum(1 for v in fields.values() if v)
+    return 1 + got, fields   # 实体本身 1 分 + 每个字段 1 分
+
+
+def _check17(context, pages):
+    nodes = [n for p in pages for n in _of_type(p.jsonld, BRAND_TYPES)]
+    if not nodes:
+        return make_check(17, DIM, "bad", "品牌实体标记", 0, 5,
+            "全站未检测到 Organization / Brand 结构化标记，AI 无法建立品牌实体档案。",
+            "在首页等核心页面添加 JSON-LD Organization/Brand，并填写名称、官网、logo 与联系方式。",
+            evidence=[f"{context.domain}：未发现品牌实体标记"])
+
+    # 取全站最完整的品牌实体判定（而非第一个），保证不因页面顺序漏分
+    best_score, best_fields, best_node = 0, {}, None
+    for node in nodes:
+        s, fields = _brand_score(node, context.domain)
+        if s > best_score:
+            best_score, best_fields, best_node = s, fields, node
+    name = str(_get(best_node, "name") or "").strip()
+    url = _get(best_node, "url", "@id") or ""
+    logo = bool(best_fields.get("logo"))
+    contact = bool(best_fields.get("联系方式"))
+    got = [k for k, v in best_fields.items() if v]
+    missing = [k for k, v in best_fields.items() if not v]
+    score = best_score
     status = "good" if score == 5 else ("warn" if score >= 3 else "bad")
     impact = f"检测到品牌实体标记，已含 {len(got)}/4 项关键字段"
     if missing:
@@ -126,15 +153,21 @@ def _check17(context):
            "联系方式用 contactPoint/telephone/email/address。")
     return make_check(17, DIM, status, "品牌实体标记", score, 5, impact, fix,
         evidence=[f"品牌实体：name={name or '(空)'}，url={url or '(空)'}，"
-                  f"logo={'有' if logo else '无'}，联系方式={'有' if contact else '无'}"])
+                  f"logo={'有' if logo else '无'}，联系方式={'有' if contact else '无'}",
+                  f"共检测到 {len(nodes)} 个品牌实体节点，按最完整者计分"])
 
 
 # ---------------------------------------------------------------------------
 # ID 18 网站主体标记（4 分）
 # ---------------------------------------------------------------------------
 
+# 搜索入口占位符：形如 {search_term_string} / {q}（占位符内只允许字母数字下划线，
+# 避免把 JSON 自带的花括号误判为占位符）
+_SEARCH_PLACEHOLDER_RE = re.compile(r"\{[A-Za-z0-9_]+\}")
+
+
 def _has_search_action(node) -> bool:
-    """WebSite 标记是否带搜索入口（SearchAction 或含占位符的 target）。"""
+    """WebSite 标记是否带搜索入口（SearchAction，或 target 含 {xxx} 占位符）。"""
     pa = node.get("potentialAction")
     if isinstance(pa, dict):
         pa = [pa]
@@ -145,40 +178,56 @@ def _has_search_action(node) -> bool:
             continue
         if "SearchAction" in _type_set(a):
             return True
-        if "{" in json.dumps(a, ensure_ascii=False):
-            return True
+        target = a.get("target")
+        if isinstance(target, str):
+            if _SEARCH_PLACEHOLDER_RE.search(target):
+                return True
+        elif isinstance(target, dict):
+            if _SEARCH_PLACEHOLDER_RE.search(json.dumps(target, ensure_ascii=False)):
+                return True
     return False
 
 
-def _check18(context):
-    nodes = [n for p in context.pages for n in _of_type(p.jsonld, WEBSITE_TYPES)]
+def _website_score(node) -> tuple[int, str, str]:
+    """计算单个 WebSite 标记的完整度，返回 (得分, 状态, 说明)。"""
+    name = str(_get(node, "name") or "").strip()
+    url = _get(node, "url", "@id") or ""
+    search = _has_search_action(node)
+    if not name:
+        return 1, "bad", "有 WebSite 标记但缺少名称，标记无效"
+    if not url:
+        return 2, "warn", "WebSite 标记有名称但缺官网 URL"
+    if not search:
+        return 3, "warn", "WebSite 名称与 URL 齐全，但缺站内搜索入口（SearchAction）"
+    return 4, "good", "WebSite 标记齐全：名称 + URL + 站内搜索入口"
+
+
+def _check18(context, pages):
+    nodes = [n for p in pages for n in _of_type(p.jsonld, WEBSITE_TYPES)]
     if not nodes:
         return make_check(18, DIM, "bad", "网站主体标记", 0, 4,
             "全站未检测到 WebSite 结构化标记（含 @graph 内），AI 难以识别网站主体与站内搜索。",
             "添加 JSON-LD WebSite 标记（可放入 @graph），填写 name、url 与 potentialAction 搜索入口。",
             evidence=[f"{context.domain}：未发现 WebSite 标记（已解析 @graph）"])
-    node = nodes[0]
-    name = str(_get(node, "name") or "").strip()
-    url = _get(node, "url", "@id") or ""
-    search = _has_search_action(node)
-    if not name:
-        score, status = 1, "bad"
-        impact = "有 WebSite 标记但缺少名称，标记无效"
-    elif not url:
-        score, status = 2, "warn"
-        impact = "WebSite 标记有名称但缺官网 URL"
-    elif not search:
-        score, status = 3, "warn"
-        impact = "WebSite 名称与 URL 齐全，但缺站内搜索入口（SearchAction）"
-    else:
-        score, status = 4, "good"
-        impact = "WebSite 标记齐全：名称 + URL + 站内搜索入口"
+
+    # 取全站最完整的 WebSite 标记判定
+    score, status, impact = 0, "bad", ""
+    best_node = None
+    for node in nodes:
+        s, st, im = _website_score(node)
+        if s > score:
+            score, status, impact = s, st, im
+            best_node = node
+    name = str(_get(best_node, "name") or "").strip()
+    url = _get(best_node, "url", "@id") or ""
+    search = _has_search_action(best_node)
     fix = ("保持现状。" if score == 4 else
            "补齐 WebSite 的 name、url，并添加 potentialAction: SearchAction"
            "（target 含 {search_term_string}）。")
     return make_check(18, DIM, status, "网站主体标记", score, 4, impact, fix,
         evidence=[f"WebSite：name={name or '(空)'}，url={url or '(空)'}，"
-                  f"搜索入口={'有' if search else '无'}"])
+                  f"搜索入口={'有' if search else '无'}",
+                  f"共检测到 {len(nodes)} 个 WebSite 节点，按最完整者计分"])
 
 
 # ---------------------------------------------------------------------------
@@ -206,11 +255,10 @@ def _crumb_ok(node, domain) -> bool:
         if not name or not url:
             return False
         try:
-            host = urlparse(url).hostname or ""
             path = urlparse(url).path.rstrip("/")
         except Exception:
             return False
-        if domain not in host:
+        if not _host_matches(domain, url):
             return False
         if prev and not path.startswith(prev + "/"):
             return False
@@ -218,10 +266,10 @@ def _crumb_ok(node, domain) -> bool:
     return True
 
 
-def _check19(context):
+def _check19(context, pages):
     total, valid = 0, 0
     evidence = []
-    for p in context.pages:
+    for p in pages:
         for node in _of_type(p.jsonld, BREADCRUMB_TYPES):
             total += 1
             ok = _crumb_ok(node, context.domain)
@@ -280,10 +328,10 @@ def _page_types(page) -> tuple[set, set]:
     return types, jt
 
 
-def _check20(context):
+def _check20(context, pages):
     typed, matched = 0, 0
     detail = []
-    for p in context.pages:
+    for p in pages:
         types, jt = _page_types(p)
         if not types:
             continue
@@ -323,9 +371,9 @@ def _check20(context):
 # ID 21 结构化数据有效性（4 分）
 # ---------------------------------------------------------------------------
 
-def _check21(context):
-    blocks = sum(len(p.jsonld) for p in context.pages)
-    errors = sum(p.jsonld_errors for p in context.pages)
+def _check21(context, pages):
+    blocks = sum(len(p.jsonld) for p in pages)
+    errors = sum(p.jsonld_errors for p in pages)
     total = blocks + errors
     if total == 0:
         return make_check(21, DIM, "bad", "结构化数据有效性", 0, 4,
@@ -355,10 +403,19 @@ def _check21(context):
 def run(context):
     if context is None:
         return []
-    return [
-        _check17(context),
-        _check18(context),
-        _check19(context),
-        _check20(context),
-        _check21(context),
+    pages = [p for p in (context.pages or []) if p is not None]
+    checks = [
+        _check17(context, pages),
+        _check18(context, pages),
+        _check19(context, pages),
+        _check20(context, pages),
+        _check21(context, pages),
     ]
+    # 可选 AI 增强（DeepSeek）：为每项补充 ai_impact/ai_fix，并追加维度总评。
+    # 未配置 key / 失败时静默降级为纯规则模式，分数不受影响。
+    checks, summary = _ai.enhance(context.domain, "能被理解", checks)
+    if summary:
+        checks.append(make_check(902, DIM, "advice", "AI 维度总评", None, None,
+                                 summary, "",
+                                 evidence=[f"由 DeepSeek 生成（{context.domain}）"]))
+    return checks
